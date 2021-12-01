@@ -1,0 +1,75 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "minecraft.fullname" . }}-mc-config-files
+  labels:
+    {{- include "minecraft.labels" . | nindent 4 }}
+data:
+{{- with .Values.server.config }}
+  server.properties: |
+    #Minecraft server properties
+    #{{ now | date "Mon Jan 2 15:04:05 MST 2006" }}
+    enable-jmx-monitoring={{ .advanced.enableJMXMonitoring | default false }}
+    rcon.port={{ .rcon.port | default 25575 }}
+    gamemode={{ .gamemode | default "survival" }}
+    enable-command-block={{ .game.enableCommandBlock | default false }}
+    enable-query={{ .query.enabled | default false }}
+    level-name={{ .levelName | default "world" }}
+    level-seed: {{ .seed | default "-7497863297697545553" }}
+    motd={{ .motd | default "A Minecraft Server" }}
+    query.port={{ .query.port | default 25565 }}
+    pvp={{ .pvp | default true }}
+    difficulty={{ .difficulty | default "easy" }}
+    network-compression-threshold={{ .io.networkCompressionThreshold | default 256 }}
+    require-resource-pack={{ .resourcePack.require | default false }}
+    max-tick-time={{ .game.maxTickTime | default 60000 }}
+    use-native-transport={{ .io.useNativeTransport | default "true" }}
+    max-players={{ .game.maxPlayers | default 20 }}
+    online-mode={{ .game.onlineMode | default "true" }}
+    enable-status={{ .game.enableStatus | default "true" }}
+    allow-flight={{ .game.allowFlight | default "false" }}
+    broadcast-rcon-to-ops={{ .rcon.broadcastToOPs | default "true" }}
+    view-distance={{ .rendering.viewDistance | default "10" }}
+    server-ip={{ .server.host | default "0.0.0.0" }}
+    resource-pack-prompt={{ .resourcePack.prompt | default "" }}
+    allow-nether={{ .game.allowNether | default true }}
+    server-port={{ .server.port | default 25565 }}
+    enable-rcon={{ .rcon.enabled | default true }}
+    sync-chunk-writes={{ .io.syncChunkWrites | default true }}
+    op-permission-level={{ .permissionLevel.op | default 4 }}
+    prevent-proxy-connections={{ .server.preventProxyConnections | default false }}
+    hide-online-players={{ .game.hideOnlinePlayers | default false }}
+    resource-pack={{ .resourcePack.pack | default "" }}
+    entity-broadcast-range-percentage={{ .advanced.entityBroadcastRangePercentage | default 100 }}
+    simulation-distance={{ .rendering.simulationDistance | default 10 }}
+    player-idle-timeout={{ .game.playerIdleTimeout | default 0 }}
+    force-gamemode={{ .game.forceGamemode | default false }}
+    rate-limit={{ .server.rateLimit | default 0 }}
+    hardcore={{ .hardcore | default false }}
+    white-list={{ .whitelist.enabled | default false }}
+    broadcast-console-to-ops={{ .server.broadcastConsoleToOPs | default true }}
+    spawn-npcs={{ .game.spawn.npcs | default true }}
+    spawn-animals={{ .game.spawn.animals | default true }}
+    function-permission-level={{ .permissionLevel.function | default 2 }}
+    text-filtering-config={{ .textFilteringConfig | default "" }}
+    spawn-monsters={{ .game.spawn.monsters | default true }}
+    enforce-whitelist={{ .whitelist.enforce | default false }}
+    resource-pack-sha1={{ .resourcePack.sha1 | default "" }}
+    spawn-protection={{ .game.spawnProtection | default 16 }}
+    max-world-size={{ .game.maxWorldSize | default 29999984 }}
+    rcon.password={{- include "minecraft.rconPassword" . | required "An RCON password is required to control the server" -}}
+{{- end }}
+  eula.txt: |
+    #By changing the setting below to TRUE you are indicating your agreement to our EULA (https://account.mojang.com/documents/minecraft_eula).
+    #{{ now | date "Mon Jan 2 15:04:05 MST 2006" }}
+    eula=true
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "minecraft.fullname" . }}-config
+  labels:
+    {{- include "minecraft.labels" . | nindent 4 }}
+data:
+  SERVER_DOWNLOAD_URL: {{ .Values.server.jar.url }}
+  MCRCON_DOWNLOAD_URL: {{ .Values.server.mcrcon.url }}

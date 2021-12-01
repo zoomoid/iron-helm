@@ -1,0 +1,133 @@
+# Default values for minecraft.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 1
+
+images:
+  server:
+    repository: openjdk
+    pullPolicy: IfNotPresent
+    # Overrides the image tag whose default is the chart appVersion.
+    tag: "17-bullseye"
+  mcrcon:
+    repository: debian
+    pullPolicy: IfNotPresent
+    tag: "17-bullseye"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+service:
+  type: ClusterIP
+  port: 25565
+
+resources: {}
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+storageClassName: ""
+
+server:
+  args: -Xmx1024M -Xms1024M -jar
+  command: nogui
+  jar:
+    url: "https://launcher.mojang.com/v1/objects/3cf24a8694aca6267883b17d934efacc5e44440d/server.jar"
+  mcrcon:
+    url: "https://github-releases.githubusercontent.com/10777685/691c62a4-407c-417c-96c6-40ae8e504b2e?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAIWNJYAX4CSVEH53A%2F20211130%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20211130T221541Z&X-Amz-Expires=300&X-Amz-Signature=9befa22db0764be9163d6830ee0d9d2690782df1d5e428af05910807fb1a2425&X-Amz-SignedHeaders=host&actor_id=16052098&key_id=0&repo_id=10777685&response-content-disposition=attachment%3B%20filename%3Dmcrcon-0.7.2-linux-x86-64.tar.gz&response-content-type=application%2Foctet-stream"
+  config:
+    gamemode: survival
+    levelName: world
+    seed: "-7497863297697545553"
+    motd: A Minecraft Server
+    pvp: true
+    difficulty: easy
+    hardcore: false
+    rendering:
+      viewDistance: 10
+      simulationDistance: 10
+    server:
+      host: 0.0.0.0
+      port: 25565
+      rateLimit: 0
+      broadcastConsoleToOPs: true
+      preventProxyConnections: false
+    game:
+      maxPlayers: 20
+      onlineMode: true
+      enableCommandBlock: false
+      enableStatus: true
+      allowFlight: true
+      maxTickTime: 60000
+      maxWorldSize: 29999984
+      spawnProtection: 16
+      forceGamemode: false
+      playerIdleTimeout: 0
+      allowNether: true
+      hideOnlinePlayers: false
+      spawn:
+        monsters: true
+        animals: true
+        npcs: true
+    rcon:
+      enabled: true
+      port: 25575
+      password: "" # if this is empty, we will generate one randomly for you!
+      broadcastToOPs: true
+    io:
+      syncChunkWrites: true
+      networkCompressionThreshold: 256
+      useNativeTransport: true
+    resourcePack:
+      pack: ""
+      require: true
+      sha1: ""
+      prompt: ""
+    query:
+      enabled: true
+      port: 25565
+    permissionLevel:
+      op: 4
+      function: 2
+    whitelist:
+      enabled: true
+    advanced:
+      enableJMXMonitoring: false
+      entityBroadcastRangePercentage: 100

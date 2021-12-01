@@ -1,0 +1,200 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "minecraft.fullname" . }}
+  labels:
+    {{- include "minecraft.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  serviceName: {{ include "minecraft.fullname" . }}
+  selector:
+    matchLabels:
+      {{- include "minecraft.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "minecraft.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "minecraft.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      terminationGracePeriodSeconds: 90
+      initContainers:
+        - name: {{ .Chart.Name }}-installer
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.images.server.repository }}:{{ .Values.images.server.tag | default "17-bullseye" }}"
+          imagePullPolicy: {{ .Values.images.server.pullPolicy }}
+          command:
+            - /bin/bash
+            - -c
+            - |
+              echo "Running minecraft installer"
+              if [[ -f server.jar ]]; then
+                echo "Server already exists, continuing with server startup!"
+                exit 0
+              fi
+              echo "Copying config files into server directory"
+              mkdir /server
+              cd server
+              cp /etc/minecraft/server.properties .
+              cp /etc/minecraft/eula.txt .
+              echo "Downloading minecraft server jar"
+              curl -L $SERVER_DOWNLOAD_URL -o server.jar
+              ls -l
+          volumeMounts:
+            - mountPath: /server
+              name: minecraft-server
+        - name: {{ .Chart.Name }}-mcrcon-installer
+          image: "{{ .Values.images.mcrcon.repository }}:{{ .Values.images.mcrcon.tag | default "bullseye" }}"
+          imagePullPolicy: {{ .Values.images.mcrcon.pullPolicy }}
+          envFrom:
+            - secretRef:
+                name: {{ include "minecraft.fullname" . }}-secrets
+          command:
+            - /bin/bash
+            - -c
+            - |
+              echo "Running mcrcon installer"
+              if [[ -f /cmd/mcrcon ]]; then
+                echo "MCRCON already installed, exiting."
+              fi
+              echo "Installing MCRCON from $MCRCON_DOWNLOAD_URL"
+              cd /cmd
+              curl -L $MCRCON_DOWNLOAD_URL -o mcrcon.tar.gz
+              tar xfz mcrcon.tar.gz
+              rm mcrcon.tar.gz
+              rm LICENSE
+          volumeMounts:
+            - mountPath: /cmd
+              name: mcrcon
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.images.server.repository }}:{{ .Values.images.server.tag | default "17-bullseye" }}"
+          imagePullPolicy: {{ .Values.images.server.pullPolicy }}
+          workingDir: /server
+          command:
+            - /bin/bash
+            - -c
+            - |
+              echo "Starting server"
+              java {{ .Values.server.args }} server.jar {{ .Values.server.command }}
+          ports:
+            - name: minecraft
+              containerPort: 25565
+              protocol: TCP
+            - name: rcon
+              containerPort: 25575
+              protocol: TCP
+          livenessProbe:
+            tcpSocket:
+              port: 25565
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            tcpSocket:
+              port: 25565
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 3
+          startupProbe:
+            tcpSocket:
+              port: 25565
+            failureThreshold: 30
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - mountPath: /server
+              name: minecraft-server
+            - mountPath: /cmd
+              name: mcrcon
+          env:
+            - name: MCRCON_HOST
+              value: localhost
+            - name: MCRCON_PORT
+              value: 25575
+          envFrom:
+            - secretRef:
+                name: {{ include "minecraft.fullname" . }}-secrets
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                  - /bin/bash
+                  - -c
+                  - |
+                    /cmd/mcrcon save-on
+            preStop:
+              exec:
+                command:
+                  - /bin/bash
+                  - -c
+                  - | 
+                    /cmd/mcrcon "say Shutting down server in 60s"
+                    sleep 60
+                    /cmd/mcrcon save-all
+                    /cmd/mcrcon stop
+        - name: {{ .Chart.Name }}-mcrcon-sidecar
+          image: "{{ .Values.images.mcrcon.repository }}:{{ .Values.images.mcrcon.tag | default "bullseye" }}"
+          imagePullPolicy: {{ .Values.images.mcrcon.pullPolicy }}
+          env:
+            - name: MCRCON_HOST
+              value: localhost
+            - name: MCRCON_PORT
+              value: 25575
+          envFrom:
+            - secretRef:
+                name: {{ include "minecraft.fullname" . }}-secrets
+          command:
+            - /bin/bash
+            - -c
+            - |
+              export PATH=/cmd:$PATH
+              mcrcon -t
+          volumeMounts:
+            - mountPath: /cmd
+              name: mcrcon
+          resources:
+            limits:
+              cpu: 50m
+              memory: 100M
+            requests:
+              cpu: 10m
+              memory: 50M
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  volumeClaimTemplates:
+    - metadata:
+        name: {{ include "minecraft.fullname" . }}
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        {{- with .Values.storageClassName }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          limits:
+            storage: 10G
+          requests:
+            storage: 1G
