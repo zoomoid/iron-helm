@@ -1,0 +1,132 @@
+name: ci
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'minecraft/**'
+
+env:
+  helm-version: "v3.7.1"
+  kubeconform-version: "v0.4.12"
+
+jobs:
+  codespell:
+    name: codespell
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v2
+      - name: Codespell
+        uses: codespell-project/actions-codespell@master
+        with:
+          skip: .git
+          exclude_file: .github/kubeconform.sh
+          ignore_words_list: iam,aks
+          check_filenames: true
+          check_hidden: true
+
+  super-linter:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - name: Lint Code Base
+        uses: github/super-linter@v4.8.1
+        env:
+          DEFAULT_BRANCH: main
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VALIDATE_ALL_CODEBASE: false
+          VALIDATE_JSCPD: false
+          VALIDATE_KUBERNETES_KUBEVAL: false
+          VALIDATE_YAML: false
+
+  lint-chart:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - name: Set up Helm
+        uses: azure/setup-helm@v1.1
+        with:
+          version: "${{ env.helm-version }}"
+      - uses: actions/setup-python@v2
+        with:
+          python-version: 3.7
+      - name: Set up chart-testing
+        uses: helm/chart-testing-action@v2.1.0
+      - name: Run chart-testing (lint)
+        run: ct lint --config .github/ct.yaml
+
+  kubeconform-chart:
+    runs-on: ubuntu-20.04
+    needs:
+      - lint-chart
+    strategy:
+      matrix:
+        k8s:
+          - v1.19.11
+          - v1.20.7
+          - v1.21.2
+          - v1.22.2
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - name: Set up Helm
+        uses: azure/setup-helm@v1.1
+        with:
+          version: "${{ env.helm-version }}"
+      - name: Run kubeconform
+        env:
+          KUBERNETES_VERSION: ${{ matrix.k8s }}
+          KUBECONFORM_VERSION: "${{ env.kubeconform-version }}"
+        run: .github/kubeconform.sh
+
+  install-chart:
+    name: install-chart
+    runs-on: ubuntu-20.04
+    needs: 
+      - kubeconform-chart
+    strategy:
+      matrix:
+        k8s:
+          - v1.19.11
+          - v1.20.7
+          - v1.21.2
+         # - v1.22.2
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - name: Set up Helm
+        uses: azure/setup-helm@v1.1
+        with:
+          version: "${{ env.helm-version }}"
+      - uses: actions/setup-python@v2
+        with:
+          python-version: 3.7
+      - name: Set up chart-testing
+        uses: helm/chart-testing-action@v2.1.0
+      - name: Run chart-testing (list-changed)
+        id: list-changed
+        run: |
+          changed=$(ct list-changed --config .github/ct.yaml)
+          if [[ -n "$changed" ]]; then
+            echo "::set-output name=changed::true"
+          fi
+      - name: Create kind cluster
+        uses: helm/kind-action@v1.2.0
+        if: steps.list-changed.outputs.changed == 'true'
+        with:
+          config: .github/kind-config.yaml
+          node_image: kindest/node:${{ matrix.k8s }}
+      - name: Run chart-testing (install)
+        run: ct install --config .github/ct.yaml

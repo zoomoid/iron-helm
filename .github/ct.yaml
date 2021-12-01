@@ -1,0 +1,6 @@
+chart-dirs: .
+chart-repos: []
+check-version-increment: true
+debug: true
+helm-extra-args: --timeout 900s
+target-branch: main
