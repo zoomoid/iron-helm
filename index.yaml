@@ -1,0 +1,19 @@
+apiVersion: v1
+entries:
+  minecraft:
+  - apiVersion: v2
+    appVersion: 1.18.0
+    created: "2021-12-01T01:23:21.876221261Z"
+    description: A Minecraft Helm chart for Kubernetes
+    digest: 5502af5af41afcdc759e1319f45c018e2a56f421cb8acd47144a7391df147dd4
+    maintainers:
+    - email: occloxium@gmail.com
+      name: Alexander Bartolomey
+    name: minecraft
+    sources:
+    - https://github.com/zoomoid/iron-helm
+    type: application
+    urls:
+    - https://github.com/zoomoid/iron-helm/releases/download/minecraft-0.1.0/minecraft-0.1.0.tgz
+    version: 0.1.0
+generated: "2021-12-01T01:23:21.876227161Z"
