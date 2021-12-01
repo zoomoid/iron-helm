@@ -109,3 +109,13 @@ server:
       enableJMXMonitoring: false
       entityBroadcastRangePercentage: 100
 ```
+
+## Installation
+
+```bash
+helm repo add zoomoid https://zoomoid.github.io/iron-helm
+helm repo update
+
+# install it
+helm install my-server zoomoid/minecraft -f values.yaml
+```
