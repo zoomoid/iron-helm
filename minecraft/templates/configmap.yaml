@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "minecraft.fullname" . }}-mc-config-files
+  name: {{ include "minecraft.fullname" . }}-config-files
   labels:
     {{- include "minecraft.labels" . | nindent 4 }}
 data:
@@ -63,6 +63,10 @@ data:
     #By changing the setting below to TRUE you are indicating your agreement to our EULA (https://account.mojang.com/documents/minecraft_eula).
     #{{ now | date "Mon Jan 2 15:04:05 MST 2006" }}
     eula=true
+  .rcon-cli.yaml: |
+    host: localhost
+    port: 25575
+    password: {{ include "minecraft.rconPassword" . }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -72,4 +76,25 @@ metadata:
     {{- include "minecraft.labels" . | nindent 4 }}
 data:
   SERVER_DOWNLOAD_URL: {{ .Values.server.jar.url }}
-  MCRCON_DOWNLOAD_URL: {{ .Values.server.mcrcon.url }}
+  RCON_CLI_DOWNLOAD_URL: {{ .Values.server.mcrcon.url }}
+  EXTRA_ARGS: >
+    -XX:+UseG1GC
+    -XX:+ParallelRefProcEnabled
+    -XX:MaxGCPauseMillis=200
+    -XX:+UnlockExperimentalVMOptions
+    -XX:+DisableExplicitGC
+    -XX:+AlwaysPreTouch
+    -XX:G1NewSizePercent=30
+    -XX:G1MaxNewSizePercent=40
+    -XX:G1HeapRegionSize=8M
+    -XX:G1ReservePercent=20
+    -XX:G1HeapWastePercent=5
+    -XX:G1MixedGCCountTarget=4
+    -XX:InitiatingHeapOccupancyPercent=15
+    -XX:G1MixedGCLiveThresholdPercent=90
+    -XX:G1RSetUpdatingPauseTimePercent=5
+    -XX:SurvivorRatio=32
+    -XX:+PerfDisableSharedMem
+    -XX:MaxTenuringThreshold=1
+    -Dusing.aikars.flags=https://mcflags.emc.gs
+    -Daikars.new.flags=true
