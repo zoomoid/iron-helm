@@ -27,6 +27,18 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       terminationGracePeriodSeconds: 90
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       initContainers:
         - name: {{ .Chart.Name }}-installer
           securityContext:
@@ -37,25 +49,30 @@ spec:
             - /bin/bash
             - -c
             - |
-              echo "Running minecraft installer"
-              if [[ -f server.jar ]]; then
-                echo "Server already exists, continuing with server startup!"
-                exit 0
+              apt-get update;
+              apt-get install -y jq;
+              echo "Running minecraft installer";
+              if [[ -f /server/server.jar ]]; then
+                echo "Server already exists, continuing with server startup!";
+                exit 0;
               fi
-              echo "Copying config files into server directory"
-              mkdir /server
-              cd server
-              cp /etc/minecraft/server.properties .
-              cp /etc/minecraft/eula.txt .
-              echo "Downloading minecraft server jar"
-              curl -L $SERVER_DOWNLOAD_URL -o server.jar
-              ls -l
+              echo "Copying config files into server directory";
+              mkdir /server;
+              cd server;
+              cp /etc/minecraft/server.properties .;
+              cp /etc/minecraft/eula.txt .;
+              echo "Downloading minecraft server jar";
+              curl -L $SERVER_DOWNLOAD_URL -o server.jar;
+              ls -l;
           volumeMounts:
             - mountPath: /server
-              name: minecraft-server
-        - name: {{ .Chart.Name }}-mcrcon-installer
-          image: "{{ .Values.images.mcrcon.repository }}:{{ .Values.images.mcrcon.tag | default "bullseye" }}"
-          imagePullPolicy: {{ .Values.images.mcrcon.pullPolicy }}
+              name: {{ include "minecraft.fullname" . }}-server
+            - mountPath: /etc/minecraft
+              name: mc-config-files
+        {{- if .Values.rcon.enabled -}}
+        - name: {{ .Chart.Name }}-rcon-installer
+          image: "{{ .Values.images.rcon.repository }}:{{ .Values.images.rcon.tag | default "bullseye" }}"
+          imagePullPolicy: {{ .Values.images.rcon.pullPolicy }}
           envFrom:
             - secretRef:
                 name: {{ include "minecraft.fullname" . }}-secrets
@@ -63,19 +80,22 @@ spec:
             - /bin/bash
             - -c
             - |
-              echo "Running mcrcon installer"
-              if [[ -f /cmd/mcrcon ]]; then
-                echo "MCRCON already installed, exiting."
+              echo "Running rcon-cli installer"
+              if [[ -f /cmd/rcon-cli ]]; then
+                echo "rcon-cli already installed, exiting."
+                exit 0
               fi
-              echo "Installing MCRCON from $MCRCON_DOWNLOAD_URL"
+              echo "Installing rcon-cli from $RCON_CLI_DOWNLOAD_URL"
               cd /cmd
-              curl -L $MCRCON_DOWNLOAD_URL -o mcrcon.tar.gz
-              tar xfz mcrcon.tar.gz
-              rm mcrcon.tar.gz
-              rm LICENSE
+              curl -L $RCON_CLI_DOWNLOAD_URL -o rcon-cli.tar.gz
+              tar xfz rcon-cli.tar.gz
+              rm -f rcon-cli.tar.gz
+              rm -f LICENSE
+              rm -f README.md
           volumeMounts:
             - mountPath: /cmd
-              name: mcrcon
+              name: {{ include "minecraft.fullname" . }}-rcon
+        {{- end -}}
       containers:
         - name: {{ .Chart.Name }}
           securityContext:
@@ -88,7 +108,7 @@ spec:
             - -c
             - |
               echo "Starting server"
-              java {{ .Values.server.args }} server.jar {{ .Values.server.command }}
+              java {{ .Values.server.args }} $EXTRA_ARGS -jar server.jar nogui
           ports:
             - name: minecraft
               containerPort: 25565
@@ -116,13 +136,13 @@ spec:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
             - mountPath: /server
-              name: minecraft-server
+              name: {{ include "minecraft.fullname" . }}-server
             - mountPath: /cmd
-              name: mcrcon
+              name: {{ include "minecraft.fullname" . }}-rcon
           env:
-            - name: MCRCON_HOST
+            - name: RCON_HOST
               value: localhost
-            - name: MCRCON_PORT
+            - name: RCON_PORT
               value: 25575
           envFrom:
             - secretRef:
@@ -134,24 +154,24 @@ spec:
                   - /bin/bash
                   - -c
                   - |
-                    /cmd/mcrcon save-on
+                    /cmd/rcon-cli save-on
             preStop:
               exec:
                 command:
                   - /bin/bash
                   - -c
                   - | 
-                    /cmd/mcrcon "say Shutting down server in 60s"
-                    sleep 60
-                    /cmd/mcrcon save-all
-                    /cmd/mcrcon stop
+                    /cmd/rcon-cli "say 'Shutting down server in 60s'";
+                    sleep 60;
+                    /cmd/rcon-cli save-all;
+                    /cmd/rcon-cli stop
         - name: {{ .Chart.Name }}-mcrcon-sidecar
-          image: "{{ .Values.images.mcrcon.repository }}:{{ .Values.images.mcrcon.tag | default "bullseye" }}"
+          image: "{{ .Values.images.rcon.repository }}:{{ .Values.images.rcon.tag | default "bullseye" }}"
           imagePullPolicy: {{ .Values.images.mcrcon.pullPolicy }}
           env:
-            - name: MCRCON_HOST
+            - name: RCON_HOST
               value: localhost
-            - name: MCRCON_PORT
+            - name: RCON_PORT
               value: 25575
           envFrom:
             - secretRef:
@@ -160,11 +180,14 @@ spec:
             - /bin/bash
             - -c
             - |
-              export PATH=/cmd:$PATH
-              mcrcon -t
+              export PATH=/cmd:$PATH;
+              rcon-cli
           volumeMounts:
             - mountPath: /cmd
-              name: mcrcon
+              name: {{ include "minecraft.fullname" . }}-rcon
+            - mountPath: /root/.rcon-cli.yaml
+              name: rcon-config-files
+              subPath: .rcon-cli.yaml
           resources:
             limits:
               cpu: 50m
@@ -172,21 +195,24 @@ spec:
             requests:
               cpu: 10m
               memory: 50M
-      {{- with .Values.nodeSelector }}
-      nodeSelector:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.affinity }}
-      affinity:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.tolerations }}
-      tolerations:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
+        volumes:
+          - name: rcon-config-files
+            configMap:
+              name: {{ include "minecraft.fullname" . }}-config-files
+              items:
+                - key: .rcon-cli.yaml
+                  path: .rcon-cli.yaml
+          - name: mc-config-files
+            configMap:
+              name: {{ include "minecraft.fullname" . }}-config-files
+              items:
+                - key: server.properties
+                  path: server.properties
+                - key: eula.txt
+                  path: eula.txt
   volumeClaimTemplates:
     - metadata:
-        name: {{ include "minecraft.fullname" . }}
+        name: {{ include "minecraft.fullname" . }}-server
       spec:
         accessModes:
           - ReadWriteOnce
@@ -198,3 +224,17 @@ spec:
             storage: 10G
           requests:
             storage: 1G
+    - metadata:
+        name: {{ include "minecraft.fullname" . }}-rcon
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        {{- with .Values.storageClassName }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          limits:
+            storage: 100Mi
+          requests:
+            storage: 20Mi
+
